@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Meeting List Generator Wizard</title>
+        <script type="text/javascript">
+            function findGetParameter(parameterName) {
+                var result = null,
+                tmp = [];
+                location.search.substr(1).split("&").forEach(function (item) {
+                    tmp = item.split("=");
+                    if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1]);
+                });
+                return result;
+            };
+            
+            function evaluateUI() {
+                if (!findGetParameter('GIMME')) {
+                    document.getElementById('throbber-container').style.display = 'none';
+                    document.getElementById('pickerForm').style.display = 'block';
+                    
+                    if (document.getElementById('two-fold-tabloid').checked) {
+                        document.getElementById('column-container').style.display = 'block';
+                        document.getElementById('moreColumns').style.display = 'none';
+                        document.getElementById('pages-container').style.display = 'none';
+                        document.getElementById('columns-4').checked = true;
+                    } else {
+                        if (document.getElementById('two-fold-us-letter').checked) {
+                            document.getElementById('column-container').style.display = 'none';
+                            document.getElementById('pages-container').style.display = 'none';
+                        } else {
+                            if (document.getElementById('two-fold-us-legal').checked) {
+                                document.getElementById('column-container').style.display = 'block';
+                                document.getElementById('moreColumns').style.display = 'none';
+                                document.getElementById('pages-container').style.display = 'none';
+                                document.getElementById('columns-4').checked = true;
+                            } else {
+                                document.getElementById('column-container').style.display = 'block';
+                                document.getElementById('moreColumns').style.display = 'block';
+                                document.getElementById('pages-container').style.display = 'block';
+                                if (document.getElementById('layout-chapbook').checked) {
+                                    document.getElementById('bottom-container-small').style.display = 'block';
+                                    document.getElementById('bottom-container-large').style.display = 'none';
+                                } else {
+                                    document.getElementById('bottom-container-small').style.display = 'none';
+                                    document.getElementById('bottom-container-large').style.display = 'block';
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+            
+            function handleGimme() {
+                if (findGetParameter('GIMME')) {
+                    document.getElementById('throbber-container').style.display = 'block';
+                    document.getElementById('pickerForm').style.display = 'none';
+                    
+                    var pages = null;
+                    var columns = null;
+                    
+                    var uri = 'printed_lists/index.php?layout=';
+                    
+                    switch(findGetParameter('layout')) {
+                        case 'two-fold-tabloid':
+                            uri += 'two-fold-tabloid';
+                            columns = parseInt(findGetParameter('columns'));
+                        break;
+                        case 'two-fold-us-legal':
+                            uri += 'two-fold-us-legal';
+                            columns = parseInt(findGetParameter('columns'));
+                        break;
+                        case 'two-fold-us-letter':
+                            uri += 'two-fold-us-letter';
+                        break;
+                        case 'chapbook':
+                            uri += 'chapbook';
+                            pages = parseInt(findGetParameter('pages-small'));
+                            columns = parseInt(findGetParameter('columns'));
+                        break;
+                        case 'booklet':
+                            uri = 'printed_lists/index.php?use_list=gnyr&layout=booklet';
+                            pages = parseInt(findGetParameter('pages-large'));
+                            columns = parseInt(findGetParameter('columns'));
+                        break;
+                    };
+                    
+                    if (columns) {
+                        uri += '&columns=' + columns;
+                    }
+                    
+                    if (pages) {
+                        uri += '&pages=' + pages;
+                    }
+                   
+                    location.href=uri;
+                };
+            };
+            
+        </script>
+        <style type="text/css">
+            body {
+                text-align:center;
+                font-family:Arial,Sans-serif;
+            }
+            
+            div.formContents {
+                margin:auto;
+                display:table;
+            }
+            
+            div.layout-container {
+                margin:auto;
+                display:table;
+                text-align:left;
+                float:left;
+            }
+            
+            div.selectionLine {
+                clear:both;
+                margin-top:0.25em;
+                vertical-align:center;
+            }
+            
+            div.selectionLine div.selectionBlock {
+                float:left;
+                display: table;
+            }
+            
+            div.selectionBlock h4 {
+                margin: 0;
+                margin-bottom: 0.25em;
+            }
+            
+            div.selectionLine div.choiceBlock {
+                display: table;
+                margin:auto;
+            }
+            
+            div.choiceBlock input {
+                float:left;
+                margin:0;
+                line-height:100%;
+                margin-right: 1em;
+            }
+            div.choiceBlock label {
+                float:left;
+                display:block;
+            }
+            div.choiceBlock label img {
+                float:left;
+                display:block;
+            }
+            div.bottom-container {
+                float:none;
+                clear:both;
+                display:table;
+                width:auto;
+                margin:auto;
+                padding-top:1em;
+            }
+            div.bottom-container label {
+                display:inline;
+                margin-right: 0.5em;
+            }
+            div.bottom-container select {
+                display:inline;
+            }
+        </style>
+    </head>
+    <body onload="handleGimme()">
+        <div id="throbber-container" style="display:none">
+            <img src="images/throbber.gif" alt="throbber" style="position:absolute;width:190px;top:50%;left:50%;margin-top:-95px;margin-left:-95px" />
+        </div>
+        <form action="" method="GET" id="pickerForm"">
+            <div class="formContents">
+                <h1>Create A Meeting List PDF</h1>
+                <div class="layout-container" style="text-align:center;padding:0;margin-right:1.5em">
+                    <div class="selectionLine">
+                        <h3>Two-Fold</h4>
+                        <div class="selectionBlock" style="width:33%">
+                            <h4>Tabloid</h4>
+                            <div class="choiceBlock">
+                                <input type="radio" name="layout" value="two-fold-tabloid" id="two-fold-tabloid" checked="checked" onchange="evaluateUI()" />
+                                <label for="two-fold-tabloid" class="thumbnail-label">
+                                    <img src="images/TabloidTwoFold.png" alt="Taboid Icon" width="34px" class="thumbnail" />
+                                </label>
+                            </div>
+                        </div>
+                        <div class="selectionBlock" style="width:33%">
+                            <h4>US Legal</h4>
+                            <div class="choiceBlock">
+                                <input type="radio" name="layout" value="two-fold-us-legal" id="two-fold-us-legal" onchange="evaluateUI()" />
+                                <label for="two-fold-us-legal" class="thumbnail-label">
+                                    <img src="images/USLegalTwoFold.png" alt="US Legal Icon" height="48px" class="thumbnail" />
+                                </label>
+                            </div>
+                        </div>
+                        <div class="selectionBlock" style="width:33%">
+                            <h4>US Letter</h4>
+                            <div class="choiceBlock">
+                                <input type="radio" name="layout" value="two-fold-us-letter" id="two-fold-us-letter" onchange="evaluateUI()" />
+                                <label for="two-fold-us-letter" class="thumbnail-label">
+                                    <img src="images/USLetterTwoFold.png" alt="US Letter Icon" height="48px" class="thumbnail" />
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="selectionLine" style="padding-top:0.5em">
+                        <h3>Booklets</h4>
+                        <div class="selectionBlock" style="width:50%">
+                            <h4>Smaller</h4>
+                            <div class="choiceBlock">
+                                <input type="radio" name="layout" value="chapbook" id="layout-chapbook" onchange="evaluateUI()" />
+                                <label for="layout-chapbook" class="thumbnail-label">
+                                    <img src="images/Chapbook.png" alt="Chapbook Icon" width="50px" class="thumbnail" />
+                                </label>
+                            </div>
+                        </div>
+                        <div class="selectionBlock" style="width:50%">
+                            <h4>Larger</h4>
+                            <div class="choiceBlock">
+                                <input type="radio" name="layout" value="booklet" id="layout-booklet" onchange="evaluateUI()" />
+                                <label for="layout-booklet" class="thumbnail-label">
+                                    <img src="images/Booklet.png" alt="Booklet Icon" width="50px" class="thumbnail" />
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="column-container" class="layout-container">
+                    <div class="selectionLine">
+                        <div class="selectionBlock" style="margin-left:1.0em;padding-top:0.25em">
+                            <h4>1 Column</h4>
+                            <div class="choiceBlock">
+                                <input type="radio" name="columns" value="1" id="columns-1" />
+                                <label for="columns-1" class="thumbnail-label">
+                                    <img src="images/Column-1.png" alt="US Letter Icon" width="48px" class="thumbnail" />
+                                </label>
+                            </div>
+                        </div>
+                        <div class="selectionBlock" style="margin-left:1.0em;padding-top:0.25em">
+                            <h4>2 Columns</h4>
+                            <div class="choiceBlock">
+                                <input type="radio" name="columns" value="2" id="columns-2" />
+                                <label for="columns-2" class="thumbnail-label">
+                                    <img src="images/Column-2.png" alt="US Letter Icon" width="48px" class="thumbnail" />
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="selectionLine">
+                        <div class="selectionBlock" style="margin-left:1.0em;padding-top:0.25em">
+                            <h4>3 Columns</h4>
+                            <div class="choiceBlock">
+                                <input type="radio" name="columns" value="3" id="columns-3" />
+                                <label for="columns-3" class="thumbnail-label">
+                                    <img src="images/Column-3.png" alt="US Letter Icon" width="48px" class="thumbnail" />
+                                </label>
+                            </div>
+                        </div>
+                        <div class="selectionBlock" style="margin-left:1.0em;padding-top:0.25em">
+                            <h4>4 Columns</h4>
+                            <div class="choiceBlock">
+                                <input type="radio" name="columns" value="4" id="columns-4" checked="checked" />
+                                <label for="columns-4" class="thumbnail-label">
+                                    <img src="images/Column-4.png" alt="US Letter Icon" width="48px" class="thumbnail" />
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="moreColumns" style="display:none">
+                        <div class="selectionLine">
+                            <div class="selectionBlock" style="margin-left:1.0em;padding-top:0.25em">
+                                <h4>5 Columns</h4>
+                                <div class="choiceBlock">
+                                    <input type="radio" name="columns" value="5" id="columns-5" />
+                                    <label for="columns-5" class="thumbnail-label">
+                                        <img src="images/Column-5.png" alt="US Letter Icon" width="48px" class="thumbnail" />
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="selectionBlock" style="margin-left:1.0em;padding-top:0.25em">
+                                <h4>6 Columns</h4>
+                                <div class="choiceBlock">
+                                    <input type="radio" name="columns" value="6" id="columns-6" />
+                                    <label for="columns-6" class="thumbnail-label">
+                                        <img src="images/Column-6.png" alt="US Letter Icon" width="48px" class="thumbnail" />
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="selectionLine">
+                            <div class="selectionBlock" style="margin-left:1.0em;padding-top:0.25em">
+                                <h4>7 Columns</h4>
+                                <div class="choiceBlock">
+                                    <input type="radio" name="columns" value="7" id="columns-7" />
+                                    <label for="columns-7" class="thumbnail-label">
+                                        <img src="images/Column-7.png" alt="US Letter Icon" width="48px" class="thumbnail" />
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="selectionBlock" style="margin-left:1.0em;padding-top:0.25em">
+                                <h4>8 Columns</h4>
+                                <div class="choiceBlock">
+                                    <input type="radio" name="columns" value="8" id="columns-8" />
+                                    <label for="columns-8" class="thumbnail-label">
+                                        <img src="images/Column-8.png" alt="US Letter Icon" width="48px" class="thumbnail" />
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bottom-container" id="pages-container" style="display:none">
+                    <div id="bottom-container-small" style="display:none">
+                        <label for="pages-small">Pages:</label>
+                        <select name="pages-small" id="pages-select-small">
+                            <option value="4" selected="selected">4</option>
+                            <option value="8">8</option>
+                            <option value="12">12</option>
+                            <option value="16">16</option>
+                            <option value="20">20</option>
+                        </select>
+                    </div>
+                    <div id="bottom-container-large" style="display:none">
+                        <label for="pages-large">Pages:</label>
+                        <select name="pages-large" id="pages-select-large">
+                            <option value="24" selected="selected">24</option>
+                            <option value="28">28</option>
+                            <option value="32">32</option>
+                            <option value="36">36</option>
+                            <option value="40">40</option>
+                            <option value="44">44</option>
+                            <option value="48">48</option>
+                            <option value="52">52</option>
+                            <option value="56">56</option>
+                            <option value="60">60</option>
+                            <option value="64">64</option>
+                            <option value="68">68</option>
+                            <option value="72">72</option>
+                            <option value="76">76</option>
+                            <option value="80">80</option>
+                            <option value="84">84</option>
+                            <option value="88">88</option>
+                            <option value="92">92</option>
+                            <option value="96">96</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="bottom-container">
+                    <input class="submit-button" type="submit" id="GIMME" name="GIMME" value="GIMME" />
+                </div>
+            </div>
+        </form>
+    </body>
+</html>

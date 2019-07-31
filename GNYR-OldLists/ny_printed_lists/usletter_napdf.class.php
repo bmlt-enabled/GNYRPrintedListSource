@@ -1,0 +1,592 @@
+<?php
+/**
+	\file usletter_napdf.class.php
+	
+	\brief This file creates and dumps a US Letter meeting list in PDF form.
+*/
+ini_set('display_errors', 1);
+ini_set('error_reporting', E_ERROR);
+// Get the napdf class, which is used to fetch the data and construct the file.
+require_once ( dirname ( __FILE__ ).'/../pdf_generator/printableList.class.php' );
+require_once ( dirname ( __FILE__ ).'/pdf_decls.php' );
+
+/**
+	\brief	This creates and manages an instance of the napdf class, and creates
+	the PDF file.
+*/
+define ( 'PDF_MARGIN', 0.15 );
+define ( 'PDF_PAGE_WIDTH', 11 );
+define ( 'PDF_PAGE_HEIGHT', 8.5 );
+define ( 'PDF_COLUMNS', 3 );
+
+class usletter_napdf extends printableList implements IPrintableList
+{
+	var $weekday_names = array ( "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" );
+	var	$pos = array ( 'start' => 1, 'end' => '', 'count' => 0, 'y' => 0, 'weekday' => 1 );
+	var $formats = 0;
+	var $blockColor = array ( 0, 0, 0 );
+	var $blockTextColor = array ( 255, 255, 255 );
+	
+	/********************************************************************
+		\brief	The constructor for this class does a lot. It creates the instance of the napdf class, gets the data from the
+		server, then sorts it. When the constructor is done, the data is ready to be assembled into a PDF.
+		
+		If the napdf object does not successfully get data from the server, then it is set to null.
+	*/
+	function __construct ( $in_http_vars	///< The HTTP parameters we'd like to send to the server.
+							)
+	{
+		$this->page_x = PDF_PAGE_HEIGHT;			///< The width, in inches, of each page (remember we are landscape)
+		$this->page_y = PDF_PAGE_WIDTH;        ///< The height, in inches, of each page.
+		$this->units = 'in';		///< The measurement units (inches)
+		$this->font = 'Helvetica';	///< The font we'll use
+		$this->orientation = 'L';	///< The orientation (portrait)
+
+		parent::__construct ( $in_http_vars );
+	}
+	/*************************** INTERFACE FUNCTIONS ***************************/
+
+	/********************************************************************
+		\brief This function actually assembles the PDF. It does not output it.
+		
+		\returns a boolean. true if successful.
+	*/
+	function AssemblePDF ()
+	{
+		$ret = false;
+		if ( $this->napdf_instance instanceof napdf )
+			{
+			$this->page_margins = PDF_MARGIN;
+
+			$meeting_data =& $this->napdf_instance->meeting_data;
+			
+			if ( $meeting_data )
+				{
+				// Calculate the overall layout of the list
+				$this->columns = PDF_COLUMNS;
+				
+		        $this->column_width = (($this->napdf_instance->w - ($this->page_margins * 2)) / 3) - ($this->page_margins * 2);
+		        
+				// The front and back panels are third page panels.
+				$panelpage['margin'] = $listpage['margin'] = $this->page_margins;
+				$panelpage['height'] = $listpage['height'] = $this->napdf_instance->h - ($panelpage['margin'] * 2);
+				$panelpage['width'] = $listpage['width'] = $this->column_width;
+				
+				// These are the actual drawing areas.
+				
+				// The panel that is on the back of the folded list.
+				$backpanel_x_offset = $panelpage['width'] + ($listpage['margin'] * 2) + ($panelpage['margin'] * 2);
+				$backpanel_max_x_offset = $backpanel_x_offset + $panelpage['width'];
+				$backpanel_y_offset = $panelpage['margin'];
+				$backpanel_max_y_offset = $backpanel_y_offset + $panelpage['height'];
+				
+				// The panel that is up front of the folded list.
+				$frontpanel_x_offset = $backpanel_max_x_offset + ($panelpage['margin'] * 3);
+				$frontpanel_max_x_offset = $frontpanel_x_offset + $panelpage['width'];
+				$frontpanel_y_offset = $panelpage['margin'];
+				$frontpanel_max_y_offset = $frontpanel_y_offset + $panelpage['height'];
+				
+				// The front page has half dedicated to a single list panel.
+				$frontlist_x_offset = $frontpanel_max_x_offset + $panelpage['margin'];
+				$frontlist_max_x_offset = $frontlist_x_offset + $listpage['width'];
+				$frontlist_y_offset = $listpage['margin'];
+				$frontlist_max_y_offset = $frontlist_y_offset + $listpage['height'];
+				
+				global $columns, $maxwidth, $fSize, $y;
+				$maxwidth = $listpage['width'] + 1;
+				$columns = "";
+				$fSize = $this->font_size;
+								
+				foreach ( $meeting_data as &$meeting )
+					{
+					if ( isset ( $meeting['location_text'] ) && isset ( $meeting['location_street'] ) )
+					    {
+					    $meeting['location'] = $meeting['location_text'].', '.$meeting['location_street'];
+					    }
+					}
+				
+				$this->napdf_instance->AddPage ( );
+				$this->DrawListPage ( 0 );
+				$this->DrawListPage ( 1 );
+				$this->DrawListPage ( 2 );
+				
+				$this->napdf_instance->AddPage ( );
+
+				$this->DrawListPage ( 0 );
+
+				$inPrinter_Date = date ( '\R\e\v\i\s\e\d F, Y' );
+
+				$this->DrawFrontPanel ( $frontpanel_x_offset, $frontpanel_y_offset, $frontpanel_max_x_offset, $frontpanel_max_y_offset, $inPrinter_Date );
+				$this->DrawRearPanel ( $backpanel_x_offset, $backpanel_y_offset, $backpanel_max_x_offset, $backpanel_max_y_offset, $this->napdf_instance->format_data );
+				
+		        $this->DrawSubcommittees ( );
+				}
+			$ret = true;
+			}
+		
+		return $ret;
+	}
+	
+	/********************************************************************
+	*/
+	function OutputPDF ()
+	{
+		$d = date ( "Y_m_d" );
+		$this->napdf_instance->Output( "USLetter_PrintableList_$d.pdf", "I" );
+	}
+	
+	/*************************** INTERNAL FUNCTIONS ***************************/
+	
+	/********************************************************************
+	*/
+	function DrawListPage ( $in_column	///< The number of the column, from 0 to 2.
+									)
+	{
+		include_once ( dirname ( __FILE__ ).'/pdf_decls.php' );
+
+		$meetings =& $this->napdf_instance->meeting_data;
+		
+		$count_max = count ( $meetings );
+		
+		$this->napdf_instance->SetFont ( $this->font, '', $this->font_size - 5 );
+		$fontFamily = $this->napdf_instance->FontFamily;
+		$fontSize = $this->font_size - 1.5;
+		
+		$top = $this->page_margins;
+		$left = $this->page_margins + (($this->column_width + ($this->page_margins * $this->columns)) * $in_column);
+		
+		$this->napdf_instance->SetXY ( $left, $top );
+		
+		$bottom = $this->napdf_instance->h - $this->page_margins;
+		$right = $left + $this->column_width;
+		
+		$heading_height = 9;
+		$height = ($heading_height/72) + 0.03;
+		$gap2 = 0.02;
+		
+		$fSize = $fontSize / 70;
+		$fSizeSmall = ($fontSize - 1) / 70;
+	
+		$height_one_meeting = ($fSize * 5) + $gap2;
+		
+		$y_offset = $bottom - $fSize;
+		
+		$current_day = " ";
+		
+		$extra_height = $height + 0.05;
+			
+		$this->pos['y'] = $top;
+		$watermark_pos = 1.0;
+		
+		if ( $this->pos['start'] )
+			{
+			$this->pos['count'] = 0;
+			}
+		
+		while ( !$this->pos['end'] && (($this->pos['y'] + $height_one_meeting + $extra_height + ($fSizeSmall * 2)) < ($y_offset - 0.1)) )
+			{
+			$extra = 0;
+			$contd = "";
+			$desc = '';
+			
+			$meeting = $meetings[intval($this->pos['count'])];
+			$this->napdf_instance->SetLeftMargin ( $left );
+			
+			if ( $this->pos['start'] || (isset ( $meeting['weekday_tinyint'] ) && ($current_day != $meeting['weekday_tinyint']) ) )
+				{
+				$this->napdf_instance->SetFillColor ( $this->blockColor[0], $this->blockColor[1], $this->blockColor[2] );
+				$this->napdf_instance->SetTextColor ( $this->blockTextColor[0], $this->blockTextColor[1], $this->blockTextColor[2] );
+				if ( $this->pos['start'] )
+					{
+					$this->pos['start'] = "";
+					}
+				else
+					{
+					if ( ($this->pos['y'] == $top) && ($this->pos['weekday'] == $meeting['weekday_tinyint']) )
+						{
+						$contd = _PDF_CONTD;
+						}
+					}
+				
+				if ( isset ( $meeting['weekday_tinyint'] ) && ($current_day != $meeting['weekday_tinyint']) )
+					{
+					$this->pos['weekday'] = $meeting['weekday_tinyint'];
+					$current_day = $this->pos['weekday'];
+					}
+				
+				if ( $current_day < 1 )
+				    {
+				    $current_day = 1;
+				    }
+				    
+				$header = $this->weekday_names[$current_day - 1];
+				
+				$header .= $contd;
+				
+				$this->napdf_instance->SetFont ( $fontFamily, 'B', $heading_height );
+				$this->napdf_instance->Rect ( $left, $this->pos['y'], ($right - $left), $height, "F" );
+				$stringWidth = $this->napdf_instance->GetStringWidth ( $header );
+				$cellleft = (($right + $left) / 2) - ($stringWidth / 2);
+				$this->napdf_instance->SetXY ( $cellleft, $this->pos['y'] + 0.02 );
+				$this->napdf_instance->Cell ( 0, $heading_height/72, $header );
+				$this->pos['y'] += ($height);
+				}
+			else
+				{
+				$this->napdf_instance->Line ( $left, $this->pos['y'], $right, $this->pos['y'] );
+				}
+			
+			$this->napdf_instance->SetFillColor ( 255 );
+			$this->napdf_instance->SetTextColor ( 0 );
+			
+			$cell_top = $this->pos['y'] + $gap2;
+			$this->napdf_instance->SetXY ( $left, $cell_top );
+			
+			$this->napdf_instance->SetFont ( $fontFamily, 'B', $fontSize );
+			
+			$display_string = isset ( $meeting['location_municipality'] ) ? $meeting['location_municipality'] : '';
+
+			if ( isset ( $meeting['start_time'] ) )
+			    {
+			    $display_string .= ' -';
+			    $display_string .= self::translate_time ( $meeting['start_time'] );
+			    }
+			    
+			if ( isset ( $meeting['duration_time'] ) && $meeting['duration_time'] && ('01:30:00' != $meeting['duration_time']) )
+				{
+				$display_string .= " (".self::translate_duration ( $meeting['duration_time'] ).")";
+				}
+			
+			if ( isset ( $meeting['formats'] ) )
+			    {
+			    $display_string .= " (".$this->RearrangeFormats ( $meeting['formats'] ).")";
+			    }
+			
+			$this->napdf_instance->MultiCell ( $this->column_width, $fSize, utf8_decode ( $display_string ), 0, "L" );
+	
+			$this->napdf_instance->SetX ( $left );
+			$display_string = isset ( $meeting['meeting_name'] ) ? $meeting['meeting_name'] : '';
+	
+			$this->napdf_instance->MultiCell ( $this->column_width, $fSize, utf8_decode ( $display_string ), 0, "L" );
+			
+			$this->napdf_instance->SetFont ( $fontFamily, '', $fontSize );
+			
+			if ( isset ( $meeting['location_neighborhood'] ) && $meeting['location_neighborhood'] )
+				{
+				$display_string = $meeting['location_neighborhood'];
+				$this->napdf_instance->SetX ( $left );
+				$this->napdf_instance->MultiCell ( $this->column_width, $fSize, utf8_decode ( $display_string ), 0, "L" );
+				}
+			
+			$display_string = '';
+			
+			if ( isset ( $meeting['location_text'] ) && $meeting['location_text'] )
+				{
+				$display_string .= $meeting['location_text'];
+				}
+			
+			if ( isset ( $meeting['location_info'] ) && $meeting['location_info'] )
+				{
+				if ( $display_string )
+					{
+					$display_string .= ', ';
+					}
+	
+				$display_string .= " (".$meeting['location_info'].")";
+				}
+			
+			if ( $display_string )
+				{
+				$display_string .= ', ';
+				}
+			
+			$display_string .= isset ( $meeting['location_info'] ) ? $meeting['location_street'] : '';
+			
+			$this->napdf_instance->SetX ( $left );
+			$this->napdf_instance->MultiCell ( $this->column_width, $fSize, utf8_decode ( $display_string ), 0, "L" );
+			
+			if ( isset ( $meeting['description_string'] ) && $meeting['description_string'] )
+				{
+				if ( $desc )
+					{
+					$desc .= ", ";
+					}
+				$desc = $meeting['description_string'];
+				}
+			
+			if ( isset ( $meeting['comments'] ) && $meeting['comments'] )
+				{
+				if ( $desc )
+					{
+					$desc .= ", ";
+					}
+				$desc .= $meeting['comments'];
+				}
+			
+			$desc = preg_replace ( "/[\n|\r]/", ", ", $desc );
+			$desc = preg_replace ( "/,\s*,/", ",", $desc );
+			$desc = stripslashes ( stripslashes ( $desc ) );
+	
+			if ( $desc )
+				{
+				$extra = ($fSizeSmall * 3);
+				$this->napdf_instance->SetFont ( $fontFamily, 'I', $fontSize - 1 );
+				$this->napdf_instance->SetX ( $left );
+				$this->napdf_instance->MultiCell ( $this->column_width, $fSizeSmall, utf8_decode ( $desc ), 0, "L" );
+				}
+			
+			if ( !isset ( $yMax ) )
+			    {
+			    $yMax = 0;
+			    }
+			    
+			$yMax = max ( $yMax, $this->napdf_instance->GetY ( ) ) + $gap2;
+			$this->pos['y'] = $yMax;
+			$this->pos['count']++;
+			
+			if ( $this->pos['count'] == $count_max )
+				{
+				$this->pos['end'] = 1;
+				}
+			else
+				{
+				$next_meeting = $meetings[intval($this->pos['count'])];
+				
+				if ( isset ( $next_meeting['weekday_tinyint'] ) && ($current_day != $next_meeting['weekday_tinyint']) )
+					{
+					$extra_height = $height + 0.05;
+					}
+				else
+					{
+					$extra_height = 0;
+					}
+				}
+			}
+	}
+
+	/********************************************************************
+	*/
+	function RearrangeFormats ( $inFormats )
+	{
+		$inFormats = explode ( ",", $inFormats );
+		
+		if ( !in_array ( "C", $inFormats ) && !in_array ( "O", $inFormats ) )
+			{
+			array_push ( $inFormats, "C" );
+			}
+		
+		if ( !in_array ( "BK", $inFormats ) && ((in_array ( "BT", $inFormats ) || in_array ( "IW", $inFormats ) || in_array ( "JT", $inFormats ) || in_array ( "SG", $inFormats ))) )
+			{
+			array_push ( $inFormats, "BK" );
+			}
+		
+		uasort ( $inFormats, 'sas_napdf::sort_cmp' );
+		
+		$tFormats = $inFormats;
+		
+		$inFormats = array();
+		
+		foreach ( $tFormats as $format )
+			{
+			$format = trim ( $format );
+			if ( $format )
+				{
+				array_push ( $inFormats, $format );
+				}
+			}
+		
+		return join ( ",", $inFormats );
+	}
+
+	/********************************************************************
+	*/
+	static function break_meetings_by_day ( $in_meetings_array ) 
+	{
+		$last_day = -1;
+		$meetings_day = array();
+		
+		foreach ( $in_meetings_array as $meeting )
+			{
+			if ( $meeting['weekday_tinyint'] != $last_day )
+				{
+				$last_day = $meeting['weekday_tinyint'] -1;
+				}
+			
+			$meetings_day[$last_day][] = $meeting;
+			}
+		
+		return $meetings_day;
+	}
+
+	/********************************************************************
+	*/
+	static function sort_cmp ($a, $b) 
+	{
+		$order_array = array(	0=>"O", 1=>"C",
+								2=>"ES", 3=>"B", 4=>"M", 5=>"W", 6=>"GL", 7=>"YP", 8=>"BK", 9=>"IP", 10=>"Pi", 11=>"RF", 12=>"Rr",
+								13=>"So", 14=>"St", 15=>"To", 16=>"Tr", 17=>"OE", 18=>"D", 19=>"SD", 20=>"TW", 21=>"IL",
+								22=>"BL", 23=>"IW", 24=>"BT", 25=>"SG", 26=>"JT",
+								27=>"Ti", 28=>"Sm", 29=>"NS", 30=>"CL", 31=>"CS", 32=>"NC", 33=>"SC", 34=>"CH", 35=>"SL", 36=>"WC" );
+		
+		if ( in_array ( $a, $order_array ) || in_array ( $b, $order_array ) )
+			{
+			return (array_search ( $a, $order_array ) < array_search ( $b, $order_array )) ? -1 : 1;
+			}
+		else
+			{
+			return 0;
+			}
+	}
+
+	/********************************************************************
+	*/
+	static function translate_time ( $in_time_string ) 
+	{
+		$split = explode ( ":", $in_time_string );
+		if ( $in_time_string == "12:00:00" )
+			{
+			return "Noon";
+			}
+		elseif ( ($split[0] == "23") && (intval ( $split[1] ) > 45) )
+			{
+			return "Midnight";
+			}
+		else
+			{
+			return date ( "g:i A", strtotime ( $in_time_string ) );
+			}
+	}
+
+	/********************************************************************
+	*/
+	static function translate_duration ( $in_time_string ) 
+	{
+		$t = explode ( ":", $in_time_string );
+		$hours = intval ( $t[0] );
+		$minutes = intval ( $t[1] );
+		
+		$ret = '';
+		
+		if ( $hours )
+			{
+			$ret .= "$hours hour";
+			
+			if ( $hours > 1 )
+				{
+				$ret .= "s";
+				}
+				
+			if ( $minutes )
+				{
+				$ret .= " and ";
+				}
+			}
+		
+		if ( $minutes )
+			{
+			$ret .= "$minutes minutes";
+			}
+		
+		return $ret;
+	}
+
+	/********************************************************************
+		\brief This is a function that returns the results of an HTTP call to a URI.
+		It is a lot more secure than file_get_contents, but does the same thing.
+		
+		\returns a string, containing the response. Null if the call fails to get any data.
+		
+		\throws an exception if the call fails.
+	*/
+	static function call_curl ( $in_uri,				///< A string. The URI to call.
+										$in_post = true,		///< If false, the transaction is a GET, not a POST. Default is true.
+										&$http_status = null	///< Optional reference to a string. Returns the HTTP call status.
+										)
+	{
+	$ret = null;
+	
+	// If the curl extension isn't loaded, we try one backdoor thing. Maybe we can use file_get_contents.
+	if ( !extension_loaded ( 'curl' ) )
+		{
+		if ( ini_get ( 'allow_url_fopen' ) )
+			{
+			$ret = file_get_contents ( $in_uri );
+			}
+		}
+	else
+		{
+		// Create a new cURL resource.
+		$resource = curl_init();
+		
+		// If we will be POSTing this transaction, we split up the URI.
+		if ( $in_post )
+			{
+			$spli = explode ( "?", $in_uri, 2 );
+			
+			if ( is_array ( $spli ) && count ( $spli ) )
+				{
+				$in_uri = $spli[0];
+				$in_params = $spli[1];
+			
+				curl_setopt ( $resource, CURLOPT_POST, true );
+				curl_setopt ( $resource, CURLOPT_POSTFIELDS, $in_params );
+				}
+			}
+		
+		// Set url to call.
+		curl_setopt ( $resource, CURLOPT_URL, $in_uri );
+		
+		// Make curl_exec() function (see below) return requested content as a string (unless call fails).
+		curl_setopt ( $resource, CURLOPT_RETURNTRANSFER, true );
+		
+		// By default, cURL prepends response headers to string returned from call to curl_exec().
+		// You can control this with the below setting.
+		// Setting it to false will remove headers from beginning of string.
+		// If you WANT the headers, see the Yahoo documentation on how to parse with them from the string.
+		curl_setopt ( $resource, CURLOPT_HEADER, false );
+		
+		// Allow  cURL to follow any 'location:' headers (redirection) sent by server (if needed set to true, else false- defaults to false anyway).
+		// Disabled, because some servers disable this for security reasons.
+//		curl_setopt ( $resource, CURLOPT_FOLLOWLOCATION, true );
+		
+		// Set maximum times to allow redirection (use only if needed as per above setting. 3 is sort of arbitrary here).
+		curl_setopt ( $resource, CURLOPT_MAXREDIRS, 3 );
+		
+		// Set connection timeout in seconds (very good idea).
+		curl_setopt ( $resource, CURLOPT_CONNECTTIMEOUT, 10 );
+		
+		// Direct cURL to send request header to server allowing compressed content to be returned and decompressed automatically (use only if needed).
+		curl_setopt ( $resource, CURLOPT_ENCODING, 'gzip,deflate' );
+		
+		// Execute cURL call and return results in $content variable.
+		$content = curl_exec ( $resource );
+		
+		// Check if curl_exec() call failed (returns false on failure) and handle failure.
+		if ( $content === false )
+			{
+			// Cram as much info into the exception as possible.
+			throw new Exception ( "curl failure calling $in_uri, ".curl_error ( $resource ).", ".curl_errno ( $resource ) );
+			}
+		else
+			{
+			// Do what you want with returned content (e.g. HTML, XML, etc) here or AFTER curl_close() call below as it is stored in the $content variable.
+		
+			// You MIGHT want to get the HTTP status code returned by server (e.g. 200, 400, 500).
+			// If that is the case then this is how to do it.
+			$http_status = curl_getinfo ($resource, CURLINFO_HTTP_CODE );
+			}
+		
+		// Close cURL and free resource.
+		curl_close ( $resource );
+		
+		// Maybe echo $contents of $content variable here.
+		if ( $content !== false )
+			{
+			$ret = $content;
+			}
+		}
+	
+	return $ret;
+	}
+};
+?>
